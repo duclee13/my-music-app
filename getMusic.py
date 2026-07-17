@@ -4,11 +4,32 @@ import urllib.parse
 import urllib.request
 
 
+def fetchSongLyrics(songId):
+    # API công khai của Zing MP3 để lấy file lời bài hát
+    lyricApiUrl = f"https://api.mp3.zing.vn/api/v1/lyric/get?id={songId}"
+    try:
+        req = urllib.request.Request(
+            lyricApiUrl, headers={"User-Agent": "Mozilla/5.0"}
+        )
+        response = urllib.request.urlopen(req)
+        lyricData = json.loads(response.read().decode("utf-8"))
+
+        # Nếu bài hát có lời, tiến hành trích xuất
+        if (
+            "data" in lyricData
+            and len(lyricData["data"]) > 0
+            and "content" in lyricData["data"][0]
+        ):
+            return lyricData["data"][0]["content"]
+    except Exception:
+        pass
+    return "Lời bài hát đang được cập nhật..."
+
+
 def runMusicScraper():
     keywordFilePath = "searchKeywords.txt"
     databaseFilePath = "albums.json"
 
-    # 1. Đọc danh sách từ file txt
     try:
         with open(keywordFilePath, "r", encoding="utf-8") as file:
             songRequests = [
@@ -18,7 +39,6 @@ def runMusicScraper():
         print(f"❌ Không tìm thấy file {keywordFilePath}")
         return
 
-    # 2. Đọc dữ liệu cũ từ albums.json (nếu có)
     try:
         with open(databaseFilePath, "r", encoding="utf-8") as file:
             currentDatabase = json.load(file)
@@ -28,9 +48,8 @@ def runMusicScraper():
     existingIds = {song["id"] for song in currentDatabase}
     newSongsAdded = 0
 
-    print(f"🚀 Bắt đầu quét {len(songRequests)} bài hát...")
+    print(f"🚀 Bắt đầu quét {len(songRequests)} bài hát kèm lyrics...")
 
-    # 3. Quét API Zing MP3 để tìm thông tin nhạc sạch
     for songName in songRequests:
         encodedQuery = urllib.parse.quote(songName)
         apiUrl = f"http://ac.mp3.zing.vn/complete?type=artist,song,key,code&num=3&query={encodedQuery}"
@@ -48,7 +67,6 @@ def runMusicScraper():
                     bestMatch = firstDataBlock["song"][0]
                     songId = bestMatch["id"]
 
-                    # Bỏ qua nếu bài hát đã tồn tại trong database
                     if songId in existingIds:
                         continue
 
@@ -59,30 +77,35 @@ def runMusicScraper():
                     if "thumb" in bestMatch:
                         coverImage = f"https://photo-resize-zmp3.zmdcdn.me/w240_r1x1_jpeg/{bestMatch['thumb']}"
 
+                    # Robot tự động đi lấy thêm lời bài hát dựa vào songId
+                    songLyrics = fetchSongLyrics(songId)
+
                     newSong = {
                         "id": songId,
                         "title": songTitle,
                         "artist": artistName,
                         "coverUrl": coverImage,
                         "audioUrl": f"https://api.mp3.zing.vn/api/streaming/audio/{songId}/128",
+                        "lyrics": songLyrics,  # Trường dữ liệu lời bài hát mới được thêm vào
                     }
 
                     currentDatabase.append(newSong)
                     existingIds.add(songId)
                     newSongsAdded += 1
-                    print(f"✔️ Đã tìm thấy: {songTitle} - {artistName}")
+                    print(
+                        f"✔️ Đã tìm thấy bài hát và lyrics: {songTitle} - {artistName}"
+                    )
 
             time.sleep(1)
 
         except Exception as error:
             print(f"❌ Lỗi khi tìm bài '{songName}': {error}")
 
-    # 4. Lưu dữ liệu mới đè vào albums.json
     if newSongsAdded > 0:
         with open(databaseFilePath, "w", encoding="utf-8") as file:
             json.dump(currentDatabase, file, indent=4, ensure_ascii=False)
         print(
-            f"\n✅ Hoàn thành! Đã cập nhật thêm {newSongsAdded} bài hát mới."
+            f"\n✅ Hoàn thành! Đã cập nhật thêm {newSongsAdded} bài hát kèm lyrics."
         )
     else:
         print("\n⚡ Không có bài hát mới nào được thêm vào hệ thống.")
