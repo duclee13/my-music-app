@@ -45,7 +45,7 @@ def runMusicScraper():
     except (FileNotFoundError, json.JSONDecodeError):
         currentDatabase = []
 
-    existingIds = {song["id"] for song in currentDatabase}
+    existingIds = {song.get("id") for song in currentDatabase if "id" in song}
     newSongsAdded = 0
 
     print(f"🚀 Bắt đầu quét {len(songRequests)} bài hát kèm lyrics...")
@@ -65,13 +65,20 @@ def runMusicScraper():
                 firstDataBlock = jsonData["data"][0]
                 if "song" in firstDataBlock and len(firstDataBlock["song"]) > 0:
                     bestMatch = firstDataBlock["song"][0]
-                    songId = bestMatch["id"]
+                    songId = bestMatch.get("id")
+
+                    if not songId:
+                        continue
 
                     if songId in existingIds:
                         continue
 
-                    songTitle = bestMatch["name"]
-                    artistName = bestMatch["artist"]
+                    songTitle = bestMatch.get("name", songName)
+                    # Phòng thủ KeyError bằng cách tìm cả "artist" lẫn "artists_names"
+                    artistName = bestMatch.get(
+                        "artist",
+                        bestMatch.get("artists_names", "Nhiều ca sĩ"),
+                    )
 
                     coverImage = ""
                     if "thumb" in bestMatch:
@@ -86,7 +93,7 @@ def runMusicScraper():
                         "artist": artistName,
                         "coverUrl": coverImage,
                         "audioUrl": f"https://api.mp3.zing.vn/api/streaming/audio/{songId}/128",
-                        "lyrics": songLyrics,  # Trường dữ liệu lời bài hát mới được thêm vào
+                        "lyrics": songLyrics,
                     }
 
                     currentDatabase.append(newSong)
